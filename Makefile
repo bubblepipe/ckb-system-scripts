@@ -15,7 +15,7 @@ PROTOCOL_URL := https://raw.githubusercontent.com/nervosnetwork/ckb/${PROTOCOL_V
 # docker pull nervos/ckb-riscv-gnu-toolchain:bionic-20190702
 BUILDER_DOCKER := nervos/ckb-riscv-gnu-toolchain@sha256:7b168b4b109a0f741078a71b7c4dddaf1d283a5244608f7851f5714fbad273ba
 
-all: specs/cells/secp256k1_blake160_sighash_all specs/cells/dao specs/cells/secp256k1_blake160_multisig_all
+all: specs/cells/secp256k1_blake160_sighash_all specs/cells/dao specs/cells/secp256k1_blake160_multisig_all specs/cells/dynamic_ownership_secp256k1_blake160_sighash
 
 all-via-docker: ${PROTOCOL_HEADER}
 	docker run --rm -v `pwd`:/code ${BUILDER_DOCKER} bash -c "cd /code && make"
@@ -33,6 +33,11 @@ specs/cells/secp256k1_blake160_multisig_all: c/secp256k1_blake160_multisig_all.c
 specs/cells/dao: c/dao.c ${PROTOCOL_HEADER}
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
+	$(OBJCOPY) --strip-debug --strip-all $@
+
+specs/cells/dynamic_ownership_secp256k1_blake160_sighash: rust/contracts/dynamic_ownership_secp256k1_blake160_sighash/src/main.rs
+	cd rust && make build
+	cp rust/target/riscv64imac-unknown-none-elf/release/dynamic_ownership_secp256k1_blake160_sighash $@
 	$(OBJCOPY) --strip-debug --strip-all $@
 
 build/secp256k1_data_info.h: build/dump_secp256k1_data
