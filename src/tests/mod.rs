@@ -1,6 +1,7 @@
 mod dao;
 mod secp256k1_blake160_multisig_all;
 mod secp256k1_blake160_sighash_all;
+mod dynamic_ownership_secp256k1_blake160_sighash;
 
 use ckb_crypto::secp::Privkey;
 use ckb_traits::{CellDataProvider, HeaderProvider};
@@ -25,6 +26,8 @@ lazy_static! {
     pub static ref DAO_BIN: Bytes = Bytes::from(&include_bytes!("../../specs/cells/dao")[..]);
     pub static ref MULTISIG_ALL_BIN: Bytes =
         Bytes::from(&include_bytes!("../../specs/cells/secp256k1_blake160_multisig_all")[..]);
+    pub static ref DYNAMIC_OWNERSHIP_BIN: Bytes =
+        Bytes::from(&include_bytes!("../../specs/cells/dynamic_ownership_secp256k1_blake160_sighash")[..]);
 }
 
 #[derive(Default, Clone)]
