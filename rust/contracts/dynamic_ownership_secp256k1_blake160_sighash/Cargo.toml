@@ -1,0 +1,11 @@
+[package]
+name = "dynamic_ownership_secp256k1_blake160_sighash"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ckb-std = "0.17.0"
+
+[features]
+library = []
+native-simulator = ["library", "ckb-std/native-simulator"]
