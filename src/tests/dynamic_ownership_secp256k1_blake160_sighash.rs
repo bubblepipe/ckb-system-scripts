@@ -27,7 +27,7 @@ fn gen_lock_script(lock_args: Bytes) -> Script {
     Script::new_builder()
         .args(lock_args.pack())
         .code_hash(sighash_all_cell_data_hash)
-        .hash_type(ScriptHashType::Data.into())
+        .hash_type(ScriptHashType::Data1.into())
         .build()
 }
 
@@ -611,3 +611,4 @@ fn test_sighash_all_cover_extra_witnesses() {
             .input_lock_script(0),
     );
 }
+
