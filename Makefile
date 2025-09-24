@@ -38,7 +38,7 @@ specs/cells/dao: c/dao.c ${PROTOCOL_HEADER}
 specs/cells/dynamic_ownership_secp256k1_blake160_sighash: rust/contracts/dynamic_ownership_secp256k1_blake160_sighash/src/main.rs
 	cd rust && make build
 	cp rust/target/riscv64imac-unknown-none-elf/release/dynamic_ownership_secp256k1_blake160_sighash $@
-	$(OBJCOPY) --strip-debug --strip-all $@
+# 	$(OBJCOPY) --strip-debug --strip-all $@
 
 build/secp256k1_data_info.h: build/dump_secp256k1_data
 	$<
