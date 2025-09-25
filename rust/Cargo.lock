@@ -243,7 +243,7 @@ dependencies = [
  "ckb-fixed-hash",
  "faster-hex",
  "rand 0.8.5",
- "secp256k1",
+ "secp256k1 0.30.0",
  "thiserror",
 ]
 
@@ -776,7 +776,9 @@ checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 name = "dynamic_ownership_secp256k1_blake160_sighash"
 version = "0.1.0"
 dependencies = [
+ "ckb-hash",
  "ckb-std",
+ "secp256k1 0.29.1",
 ]
 
 [[package]]
@@ -1521,6 +1523,15 @@ dependencies = [
 
 [[package]]
 name = "secp256k1"
+version = "0.29.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9465315bc9d4566e1724f0fffcbcc446268cb522e60f9a27bcded6b19c108113"
+dependencies = [
+ "secp256k1-sys",
+]
+
+[[package]]
+name = "secp256k1"
 version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b50c5943d326858130af85e049f2661ba3c78b26589b8ab98e65e80ae44a1252"
@@ -1707,6 +1718,7 @@ name = "tests"
 version = "0.1.0"
 dependencies = [
  "ckb-testtool",
+ "dynamic_ownership_secp256k1_blake160_sighash",
  "serde_json",
 ]
 

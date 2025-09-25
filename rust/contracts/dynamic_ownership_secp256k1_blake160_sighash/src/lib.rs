@@ -4,6 +4,6 @@
 #[cfg(feature = "library")]
 mod main;
 #[cfg(feature = "library")]
-pub use main::program_entry;
+pub use main::{program_entry, extract_witness_lock, calculate_inputs_len, blake160};
 
 extern crate alloc;

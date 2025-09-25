@@ -1,6 +1,6 @@
 use super::{
-    blake160, sign_tx, sign_tx_by_input_group, DummyDataLoader, MAX_CYCLES, SECP256K1_DATA_BIN,
-    DYNAMIC_OWNERSHIP_BIN,
+    blake160, sign_tx, sign_tx_by_input_group, DummyDataLoader, DYNAMIC_OWNERSHIP_BIN, MAX_CYCLES,
+    SECP256K1_DATA_BIN,
 };
 use ckb_crypto::secp::{Generator, Privkey};
 use ckb_error::assert_error_eq;
@@ -410,7 +410,8 @@ fn test_super_long_witness() {
 fn test_sighash_all_2_in_2_out_cycles() {
     // Notice this is changed due to the fact that the old tests uses
     // a different definition of WitnessArgs, hence triggering the differences.
-    const CONSUME_CYCLES: u64 = 3426207;
+    // Updated for Rust implementation which is more efficient
+    const CONSUME_CYCLES: u64 = 2950541;
 
     let mut data_loader = DummyDataLoader::new();
     let mut generator = Generator::non_crypto_safe_prng(42);
@@ -611,4 +612,3 @@ fn test_sighash_all_cover_extra_witnesses() {
             .input_lock_script(0),
     );
 }
-
