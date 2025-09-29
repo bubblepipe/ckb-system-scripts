@@ -7,7 +7,7 @@ extern crate ckb_hash;
 extern crate secp256k1;
 
 use ckb_std::{
-    ckb_constants::Source,
+    ckb_constants::{Source, CellField},
     error::SysError,
     high_level::load_script,
     syscalls,
@@ -20,20 +20,8 @@ ckb_std::entry!(program_entry);
 #[cfg(not(any(feature = "library", test)))]
 ckb_std::default_alloc!(16384, 1258306, 64);
 
-const ERROR_ARGUMENTS_LEN: i8 = -1;
-const ERROR_ENCODING: i8 = -2;
-const ERROR_SYSCALL: i8 = -3;
-const ERROR_SECP_RECOVER_PUBKEY: i8 = -11;
-const ERROR_SECP_PARSE_SIGNATURE: i8 = -14;
-const ERROR_WITNESS_SIZE: i8 = -22;
-const ERROR_PUBKEY_BLAKE160_HASH: i8 = -31;
-pub const BLAKE160_SIZE: usize = 20;
-const SIGNATURE_SIZE: usize = 65;
-const RECID_INDEX: usize = 64;
-const MAX_WITNESS_SIZE: usize = 32768;
-const BLAKE2B_BLOCK_SIZE: usize = 32;
-const TEMP_SIZE: usize = 32768;
-const CKB_HASH_PERSONALIZATION: &[u8] = b"ckb-default-hash";
+mod constants;
+use constants::*;
 
 // Extract lock field from WitnessArgs and return its offset range in the witness buffer
 pub fn extract_witness_lock(witness_data: &[u8]) -> Result<Option<(usize, usize)>, i8> {
@@ -142,6 +130,128 @@ pub fn blake160(data: &[u8]) -> [u8; BLAKE160_SIZE] {
     hash[0..BLAKE160_SIZE].try_into().unwrap()
 }
 
+pub fn parse_and_match_type_id(script_data: &[u8], expected_type_id: &[u8]) -> bool {
+    // Molecule Script table encoding
+    // 
+    // Reference: 
+    // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0008-serialization/0008-serialization.md
+    // https://docs.ckb.dev/docs/rfcs/0022-transaction-structure/0022-transaction-structure
+    // 
+    // table Script { code_hash: Byte32, hash_type: byte, args: Bytes }
+    //
+    // Encoding layout:
+    // - 4 bytes: total size
+    // - 12 bytes: three offsets (4 bytes each for code_hash, hash_type, args)
+    // - 32 bytes: code_hash data
+    // - 1 byte: hash_type data
+    // - Variable: args data (4-byte length + actual bytes)
+    //
+    // For TYPE_ID script with 32-byte args:
+    // - Header: 16 bytes (4 + 12)
+    // - Data: 69 bytes (32 + 1 + 4 + 32)
+    // - Total: 85 bytes minimum
+
+    if script_data.len() < 85 { // Minimum size for a valid TYPE_ID script
+        return false;
+    }
+
+    let total_size = u32::from_le_bytes(
+        script_data[0..4].try_into().unwrap_or([0; 4])
+    ) as usize;
+
+    if script_data.len() != total_size {
+        return false;
+    }
+
+    let code_hash_offset = u32::from_le_bytes(
+        script_data[4..8].try_into().unwrap_or([0; 4])
+    ) as usize;
+
+    let hash_type_offset = u32::from_le_bytes(
+        script_data[8..12].try_into().unwrap_or([0; 4])
+    ) as usize;
+
+    let args_offset = u32::from_le_bytes(
+        script_data[12..16].try_into().unwrap_or([0; 4])
+    ) as usize;
+
+    if code_hash_offset >= total_size || hash_type_offset >= total_size || args_offset >= total_size {
+        return false;
+    }
+
+    // Make sure we dont do out-of-range reads 
+    if code_hash_offset + 32 > total_size {
+        return false;
+    }
+
+    // Verify code_hash matches TYPE_ID_CODE_HASH
+    let code_hash = &script_data[code_hash_offset..code_hash_offset + 32];
+    if code_hash != TYPE_ID_CODE_HASH {
+        return false; 
+    }
+
+    let args_data = &script_data[args_offset..];
+    if args_data.len() < 4 {
+        return false;
+    }
+
+    let args_len = u32::from_le_bytes(
+        args_data[0..4].try_into().unwrap_or([0; 4])
+    ) as usize;
+
+    if args_len != TYPE_ID_SIZE || args_data.len() < 4 + args_len {
+        return false;
+    }
+
+    // Compare args with expected type_id
+    &args_data[4..4 + TYPE_ID_SIZE] == expected_type_id
+}
+
+// Find Cell B by its type_id
+fn find_cell_by_type_id(type_id: &[u8]) -> Result<(usize, Source), i8> {
+    let mut index = 0;
+    loop {
+        let mut type_hash = [0u8; 32];
+        match syscalls::load_cell_by_field(
+            &mut type_hash, 0, index,
+            Source::CellDep,
+            CellField::TypeHash
+        ) {
+            Ok(32) => {
+                // Cell has a type script, load the full script
+                let mut type_script_buf = [0u8; 256];
+                match syscalls::load_cell_by_field(
+                    &mut type_script_buf, 0, index,
+                    Source::CellDep,
+                    CellField::Type
+                ) {
+                    Ok(len) => {
+                        if parse_and_match_type_id(&type_script_buf[..len], type_id) {
+                            return Ok((index, Source::CellDep));
+                        }
+                    }
+                    Err(_) => {} // Continue
+                }
+            }
+            Err(SysError::IndexOutOfBound) => break,
+            Ok(_) | Err(_) => {} // Cell has no type script or other error, continue
+        }
+        index += 1;
+    }
+
+    Err(ERROR_CELL_NOT_FOUND)
+}
+
+// Load blake160 hash from Cell B's data
+fn load_blake160_from_cell(index: usize, source: Source) -> Result<[u8; BLAKE160_SIZE], i8> {
+    let mut data = [0u8; BLAKE160_SIZE];
+    match syscalls::load_cell_data(&mut data, 0, index, source) {
+        Ok(BLAKE160_SIZE) => Ok(data),
+        Ok(_) => Err(ERROR_ENCODING), 
+        Err(_) => Err(ERROR_SYSCALL),
+    }
+}
+
 pub fn program_entry() -> i8 {
     // Stack allocated buffers like C code
     let mut temp: [u8; TEMP_SIZE] = [0u8; TEMP_SIZE];
@@ -153,9 +263,20 @@ pub fn program_entry() -> i8 {
     };
 
     let args = script.args().raw_data();
-    if args.len() != BLAKE160_SIZE {
+    if args.len() != TYPE_ID_SIZE {
         return ERROR_ARGUMENTS_LEN;
     }
+
+    // Find Cell B by type_id and load pubkey hash
+    let (cell_index, source) = match find_cell_by_type_id(&args) {
+        Ok((idx, src)) => (idx, src),
+        Err(e) => return e,
+    };
+
+    let pubkey_hash = match load_blake160_from_cell(cell_index, source) {
+        Ok(hash) => hash,
+        Err(e) => return e,
+    };
 
     // Load first witness from the same group
     let witness_len = match syscalls::load_witness(&mut temp, 0, 0, Source::GroupInput) {
@@ -286,9 +407,9 @@ pub fn program_entry() -> i8 {
         Err(_) => return ERROR_SECP_RECOVER_PUBKEY,
     };
 
-    // compare script arg with recovered public key 
+    // Compare with pubkey hash from Cell B
     let calculated_hash = blake160(&pubkey.serialize());
-    if calculated_hash[..] != args[..] {
+    if calculated_hash != pubkey_hash {
         return ERROR_PUBKEY_BLAKE160_HASH;
     }
 

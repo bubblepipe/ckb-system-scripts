@@ -4,17 +4,11 @@ use ckb_testtool::ckb_types::{
     packed,
     prelude::*,
 };
-use ckb_testtool::context::Context;
-use ckb_testtool::ckb_types::core::{TransactionBuilder, TransactionView, Capacity};
-use ckb_testtool::ckb_types::packed::{CellInput, CellOutput, OutPoint, Script, CellDep};
-use ckb_testtool::ckb_types::core::{DepType, ScriptHashType};
 
 use dynamic_ownership_secp256k1_blake160_sighash::{
-    extract_witness_lock, blake160 as contract_blake160
-};
-
-const BLAKE160_SIZE: usize = 20;
-const ERROR_ENCODING: i8 = -2;  
+    extract_witness_lock, blake160 as contract_blake160,
+    ERROR_ENCODING, BLAKE160_SIZE
+};  
 
 
 
@@ -177,6 +171,62 @@ mod helper_tests {
         let result = extract_witness_lock(&witness);
         assert!(result.is_err(), "Should fail with junk data appended");
         assert_eq!(result.unwrap_err(), ERROR_ENCODING, "Should return ERROR_ENCODING for junk data");
+    }
+
+    #[test]
+    fn test_parse_and_match_type_id() {
+        use dynamic_ownership_secp256k1_blake160_sighash::{parse_and_match_type_id, TYPE_ID_CODE_HASH};
+
+        // Create a valid Molecule-encoded Script with type_id as args
+        let type_id = [0x42u8; 32];
+
+        // Build a minimal valid Script structure
+        let mut script = Vec::new();
+
+        // Calculate offsets
+        let header_size = 16; // 4 bytes total + 3 * 4 bytes offsets
+        let code_hash_offset = header_size;
+        let hash_type_offset = code_hash_offset + 32;
+        let args_offset = hash_type_offset + 1;
+
+        // Args is Bytes type: 4-byte length + data
+        let args_size = 4 + 32; // 4-byte length + 32-byte type_id
+        let total_size = args_offset + args_size;
+
+        // Write header
+        script.extend_from_slice(&(total_size as u32).to_le_bytes());
+        script.extend_from_slice(&(code_hash_offset as u32).to_le_bytes());
+        script.extend_from_slice(&(hash_type_offset as u32).to_le_bytes());
+        script.extend_from_slice(&(args_offset as u32).to_le_bytes());
+
+        // Write code_hash (32 bytes) - use the actual TYPE_ID code hash
+        script.extend_from_slice(&TYPE_ID_CODE_HASH);
+
+        // Write hash_type (1 byte)
+        script.push(0x01);
+
+        // Write args (Bytes type)
+        script.extend_from_slice(&(32u32).to_le_bytes()); // Length of type_id
+        script.extend_from_slice(&type_id);
+
+        // Test matching type_id
+        assert!(parse_and_match_type_id(&script, &type_id),
+                "Should match correct type_id");
+
+        // Test non-matching type_id
+        let wrong_type_id = [0x11u8; 32];
+        assert!(!parse_and_match_type_id(&script, &wrong_type_id),
+                "Should not match wrong type_id");
+
+        // Test invalid script (too short)
+        assert!(!parse_and_match_type_id(&[0u8; 10], &type_id),
+                "Should reject too short script");
+
+        // Test script with wrong args size
+        let mut bad_script = script.clone();
+        bad_script[args_offset..args_offset + 4].copy_from_slice(&(20u32).to_le_bytes());
+        assert!(!parse_and_match_type_id(&bad_script[..bad_script.len() - 12], &type_id),
+                "Should reject script with wrong args size");
     }
 
     #[test]
