@@ -722,7 +722,7 @@ fn test_dynamic_ownership_2_in_2_out_cycles() {
     // Notice this is changed due to the fact that the old tests uses
     // a different definition of WitnessArgs, hence triggering the differences.
     // Updated for Rust implementation which is more efficient
-    const CONSUME_CYCLES: u64 = 2973797;
+    const CONSUME_CYCLES: u64 = 2936008;
 
     let mut data_loader = DeterministicDummyDataLoader::new();
     let mut generator = Generator::non_crypto_safe_prng(42);

@@ -35,9 +35,9 @@ specs/cells/dao: c/dao.c ${PROTOCOL_HEADER}
 	$(OBJCOPY) --only-keep-debug $@ $(subst specs/cells,build,$@.debug)
 	$(OBJCOPY) --strip-debug --strip-all $@
 
-specs/cells/dynamic_ownership_secp256k1_blake160_sighash: rust/contracts/dynamic_ownership_secp256k1_blake160_sighash/src/main.rs
+specs/cells/dynamic_ownership_secp256k1_blake160_sighash: FORCE
 	cd rust && make build
-	cp rust/target/riscv64imac-unknown-none-elf/release/dynamic_ownership_secp256k1_blake160_sighash $@
+	cp rust/build/release/dynamic_ownership_secp256k1_blake160_sighash $@
 # 	$(OBJCOPY) --strip-debug --strip-all $@
 
 build/secp256k1_data_info.h: build/dump_secp256k1_data
@@ -98,4 +98,6 @@ clean:
 
 dist: clean all
 
-.PHONY: all all-via-docker dist clean package-clean package publish
+FORCE:
+
+.PHONY: all all-via-docker dist clean package-clean package publish FORCE
