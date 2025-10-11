@@ -1,0 +1,29 @@
+# Rust build artifacts
+/target/
+Cargo.lock
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Debug files
+*.pdb
+
+# Backup files
+*.bak
+*.orig
+
+# Testing and coverage
+*.profraw
+*.profdata
+
+# Documentation build
+/doc/
+
+# Local configuration
+.env
+.env.local

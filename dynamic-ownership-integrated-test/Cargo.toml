@@ -1,0 +1,14 @@
+[package]
+name = "dynamic-ownership-integrated-test"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ckb-types = "*"
+ckb-hash = "*"
+ckb-crypto = "*"
+ckb-jsonrpc-types = "*"
+ckb-sdk = "*"
+tokio = { version = "*", features = ["full"] }
+hex = "*"
+serde_json = "*"
