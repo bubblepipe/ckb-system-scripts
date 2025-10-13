@@ -328,7 +328,7 @@ dependencies = [
  "ckb-fixed-hash",
  "ckb-hash",
  "ckb-occupied-capacity",
- "molecule",
+ "molecule 0.8.0",
  "numext-fixed-uint",
 ]
 
@@ -474,6 +474,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ckb-standalone-types"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5c776d70eb4f60a22a3180857646d77b2da8d33c0c4a063ad9f6610fc94609f"
+dependencies = [
+ "cfg-if",
+ "molecule 0.7.5",
+]
+
+[[package]]
 name = "ckb-std"
 version = "0.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -562,7 +572,7 @@ dependencies = [
  "derive_more 1.0.0",
  "golomb-coded-set",
  "merkle-cbt",
- "molecule",
+ "molecule 0.8.0",
  "numext-fixed-uint",
  "paste",
 ]
@@ -777,6 +787,7 @@ name = "dynamic_ownership_secp256k1_blake160_sighash"
 version = "0.1.0"
 dependencies = [
  "ckb-hash",
+ "ckb-standalone-types",
  "ckb-std",
  "secp256k1 0.29.1",
 ]
@@ -1196,6 +1207,15 @@ dependencies = [
  "libc",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "molecule"
+version = "0.7.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d4fd9767ab5e5f2ea40f71ff4c8bdb633c50509052e093c2fdd0e390a749dfa3"
+dependencies = [
+ "cfg-if",
 ]
 
 [[package]]

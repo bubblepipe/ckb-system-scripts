@@ -57,3 +57,5 @@ target
 ./tmp
 .idea/
 /specs/cells
+
+Cargo.lock

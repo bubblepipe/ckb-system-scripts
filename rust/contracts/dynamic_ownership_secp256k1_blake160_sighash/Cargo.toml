@@ -7,6 +7,7 @@ edition = "2021"
 ckb-std = "0.17.0"
 ckb-hash = { version = "0.200", default-features = false }
 secp256k1 = { version = "0.29", default-features = false, features = ["recovery", "alloc", "lowmemory"] }
+ckb-standalone-types = { version = "0.1.5", default-features = false }
 
 [features]
 library = []

@@ -1,8 +1,16 @@
 #![cfg_attr(not(any(feature = "library", test)), no_std)]
 #![cfg_attr(not(test), no_main)]
 
+ #[cfg(not(any(feature = "library", test)))]
+ckb_std::entry!(program_entry);
+#[cfg(not(any(feature = "library", test)))]
+ckb_std::default_alloc!(16384, 1258306, 64);
+
 #[cfg(any(feature = "library", test))]
 extern crate alloc;
+use alloc::vec;
+use alloc::vec::Vec;
+
 extern crate ckb_hash;
 extern crate secp256k1;
 
@@ -14,90 +22,75 @@ use ckb_std::{
 };
 use ckb_hash::Blake2bBuilder;
 use secp256k1::{ecdsa::{RecoverableSignature, RecoveryId}, Message as SecpMessage, Secp256k1};
-
-#[cfg(not(any(feature = "library", test)))]
-ckb_std::entry!(program_entry);
-#[cfg(not(any(feature = "library", test)))]
-ckb_std::default_alloc!(16384, 1258306, 64);
+use ckb_standalone_types::{packed, prelude::*};
 
 mod constants;
 use constants::*;
 
-// Extract lock field from WitnessArgs and return its offset range in the witness buffer
-pub fn extract_witness_lock(witness_data: &[u8]) -> Result<Option<(usize, usize)>, i8> {
-    // Minimum size for WitnessArgs header is 16 bytes (4 byte total size + 3 * 4 byte offsets)
-    // WitnessArgs is a table with 3 fields: lock, input_type, output_type
-    if witness_data.len() < 16 {
-        return Err(ERROR_ENCODING);
-    }
+// Extract lock field from WitnessArgs and return the actual lock bytes
+// Note: This is primarily for testing, but available for contract use too
+pub fn extract_witness_lock(witness_data: &[u8]) -> Result<Option<Vec<u8>>, i8> {
+    // Parse WitnessArgs using molecule
+    let witness_args = packed::WitnessArgs::from_slice(witness_data)
+        .map_err(|_| ERROR_ENCODING)?;
 
-    // Read header (total size)
-    let total_size = u32::from_le_bytes(
-        witness_data[0..4].try_into().map_err(|_| ERROR_ENCODING)?
-    ) as usize;
+    // Access lock field - molecule handles all the offset calculations
+    let lock_opt = witness_args.lock();
 
-    // Strict validation: witness_data length must exactly match total_size
-    if witness_data.len() != total_size {
-        return Err(ERROR_ENCODING);
-    }
-
-    // Read offset array (3 offsets: lock_start, input_type_start, output_type_start)
-    let offset_to_lock = u32::from_le_bytes(
-        witness_data[4..8].try_into().map_err(|_| ERROR_ENCODING)?
-    ) as usize;
-
-    let offset_to_input_type = u32::from_le_bytes(
-        witness_data[8..12].try_into().map_err(|_| ERROR_ENCODING)?
-    ) as usize;
-
-    // The lock field data is between offset_to_lock and offset_to_input_type
-    if offset_to_input_type == offset_to_lock {
-        // Lock field is empty
+    // Check if lock is present
+    if lock_opt.is_none() {
         return Ok(None);
     }
 
-    if offset_to_input_type < offset_to_lock || offset_to_lock < 16 {
-        return Err(ERROR_ENCODING);
-    }
+    // Get the actual bytes
+    let lock_bytes = lock_opt.to_opt()
+        .ok_or(ERROR_ENCODING)?;
 
-    // Add bounds checking
-    if offset_to_input_type > total_size || offset_to_lock >= total_size {
-        return Err(ERROR_ENCODING);
-    }
-
-    if offset_to_input_type > witness_data.len() {
-        return Err(ERROR_ENCODING);
-    }
-
-    let lock_field = &witness_data[offset_to_lock..offset_to_input_type];
-
-    // Lock field is BytesOpt - it can be empty (0 bytes) or contain Bytes
-    if lock_field.is_empty() {
-        return Ok(None);
-    }
-
-    // BytesOpt when present is encoded as Bytes (4-byte length + data)
-    if lock_field.len() < 4 {
-        return Err(ERROR_ENCODING);
-    }
-
-    let lock_bytes_len = u32::from_le_bytes(
-        lock_field[0..4].try_into().map_err(|_| ERROR_ENCODING)?
-    ) as usize;
-
-    // In Molecule spec for Bytes type, the length field is the payload size only
-    // The total field size should be 4 (header) + lock_bytes_len (payload)
-    if lock_field.len() != lock_bytes_len + 4 {
-        return Err(ERROR_ENCODING);
-    }
+    let lock_data = lock_bytes.raw_data();
 
     // Check if we have actual data
-    if lock_bytes_len == 0 {
+    if lock_data.is_empty() {
         return Ok(None);
     }
 
-    // Return absolute offsets in the witness buffer (skip 4-byte length header)
-    Ok(Some((offset_to_lock + 4, offset_to_lock + 4 + lock_bytes_len)))
+    // Return a copy of the lock data
+    Ok(Some(lock_data.to_vec()))
+}
+
+// Internal version for program_entry that returns both the signature and zeroed witness
+fn extract_and_zero_witness_lock(witness_data: &[u8]) -> Result<(Vec<u8>, Vec<u8>), i8> {
+    // Parse WitnessArgs using molecule
+    let witness_args = packed::WitnessArgs::from_slice(witness_data)
+        .map_err(|_| ERROR_ENCODING)?;
+
+    // Access lock field
+    let lock_opt = witness_args.lock();
+
+    if lock_opt.is_none() {
+        return Err(ERROR_ENCODING);
+    }
+
+    // Get the actual lock bytes
+    let lock_bytes = lock_opt.to_opt()
+        .ok_or(ERROR_ENCODING)?;
+
+    let lock_data = lock_bytes.raw_data();
+
+    if lock_data.is_empty() {
+        return Err(ERROR_ENCODING);
+    }
+
+    // Save the signature
+    let signature = lock_data.to_vec();
+
+    // Create zeroed witness using molecule builder
+    let zeroed_lock = vec![0u8; lock_data.len()];
+    let zeroed_witness_args = witness_args
+        .as_builder()
+        .lock(Some(ckb_standalone_types::bytes::Bytes::from(zeroed_lock)).pack())
+        .build();
+
+    Ok((signature, zeroed_witness_args.as_slice().to_vec()))
 }
 
 pub fn calculate_inputs_len() -> usize {
@@ -131,80 +124,26 @@ pub fn blake160(data: &[u8]) -> [u8; BLAKE160_SIZE] {
 }
 
 pub fn parse_and_match_type_id(script_data: &[u8], expected_type_id: &[u8]) -> bool {
-    // Molecule Script table encoding
-    // 
-    // Reference: 
-    // https://github.com/nervosnetwork/rfcs/blob/master/rfcs/0008-serialization/0008-serialization.md
-    // https://docs.ckb.dev/docs/rfcs/0022-transaction-structure/0022-transaction-structure
-    // 
-    // table Script { code_hash: Byte32, hash_type: byte, args: Bytes }
-    //
-    // Encoding layout:
-    // - 4 bytes: total size
-    // - 12 bytes: three offsets (4 bytes each for code_hash, hash_type, args)
-    // - 32 bytes: code_hash data
-    // - 1 byte: hash_type data
-    // - Variable: args data (4-byte length + actual bytes)
-    //
-    // For TYPE_ID script with 32-byte args:
-    // - Header: 16 bytes (4 + 12)
-    // - Data: 69 bytes (32 + 1 + 4 + 32)
-    // - Total: 85 bytes minimum
-
-    if script_data.len() < 85 { // Minimum size for a valid TYPE_ID script
-        return false;
-    }
-
-    let total_size = u32::from_le_bytes(
-        script_data[0..4].try_into().unwrap_or([0; 4])
-    ) as usize;
-
-    if script_data.len() != total_size {
-        return false;
-    }
-
-    let code_hash_offset = u32::from_le_bytes(
-        script_data[4..8].try_into().unwrap_or([0; 4])
-    ) as usize;
-
-    let hash_type_offset = u32::from_le_bytes(
-        script_data[8..12].try_into().unwrap_or([0; 4])
-    ) as usize;
-
-    let args_offset = u32::from_le_bytes(
-        script_data[12..16].try_into().unwrap_or([0; 4])
-    ) as usize;
-
-    if code_hash_offset >= total_size || hash_type_offset >= total_size || args_offset >= total_size {
-        return false;
-    }
-
-    // Make sure we dont do out-of-range reads 
-    if code_hash_offset + 32 > total_size {
-        return false;
-    }
+    // Parse Script using molecule
+    let script = match packed::Script::from_slice(script_data) {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
 
     // Verify code_hash matches TYPE_ID_CODE_HASH
-    let code_hash = &script_data[code_hash_offset..code_hash_offset + 32];
-    if code_hash != TYPE_ID_CODE_HASH {
-        return false; 
-    }
-
-    let args_data = &script_data[args_offset..];
-    if args_data.len() < 4 {
+    let code_hash = script.code_hash().raw_data();
+    if code_hash.as_ref() != TYPE_ID_CODE_HASH {
         return false;
     }
 
-    let args_len = u32::from_le_bytes(
-        args_data[0..4].try_into().unwrap_or([0; 4])
-    ) as usize;
-
-    if args_len != TYPE_ID_SIZE || args_data.len() < 4 + args_len {
+    // Check args
+    let args = script.args().raw_data();
+    if args.len() != TYPE_ID_SIZE {
         return false;
     }
 
     // Compare args with expected type_id
-    &args_data[4..4 + TYPE_ID_SIZE] == expected_type_id
+    args.as_ref() == expected_type_id
 }
 
 // Find Cell B by its type_id
@@ -294,22 +233,19 @@ pub fn program_entry() -> i8 {
         return ERROR_WITNESS_SIZE;
     }
 
-    // Extract lock field offset from WitnessArgs
-    // Only pass the actual witness data, not the whole buffer
+    // Extract lock field and get zeroed witness using molecule
     let witness_data = &temp[..witness_len];
-    let lock_range = match extract_witness_lock(witness_data) {
-        Ok(Some(range)) => range,
-        Ok(None) => return ERROR_ENCODING,
+    let (signature, zeroed_witness) = match extract_and_zero_witness_lock(witness_data) {
+        Ok(result) => result,
         Err(e) => return e,
     };
 
-    let (lock_start, lock_end) = lock_range;
-    if lock_end - lock_start != SIGNATURE_SIZE {
+    if signature.len() != SIGNATURE_SIZE {
         return ERROR_ARGUMENTS_LEN;
     }
 
-    // Save signature before we zero it
-    lock_bytes.copy_from_slice(&temp[lock_start..lock_end]);
+    // Save signature
+    lock_bytes.copy_from_slice(&signature);
 
     // Load transaction hash
     let mut tx_hash = [0u8; BLAKE2B_BLOCK_SIZE];
@@ -327,15 +263,10 @@ pub fn program_entry() -> i8 {
     // Hash transaction hash
     blake2b_ctx.update(&tx_hash);
 
-    // Zero the signature in place in the witness
-    for i in lock_start..lock_end {
-        temp[i] = 0;
-    }
-
-    // Hash the modified first witness (with length prefix)
-    let witness_len_bytes = (witness_len as u64).to_le_bytes();
-    blake2b_ctx.update(&witness_len_bytes);
-    blake2b_ctx.update(&temp[..witness_len]);
+    // Hash the zeroed witness (with length prefix)
+    let zeroed_witness_len = zeroed_witness.len() as u64;
+    blake2b_ctx.update(&zeroed_witness_len.to_le_bytes());
+    blake2b_ctx.update(&zeroed_witness);
 
     // Hash remaining witnesses in the group
     let mut i = 1;

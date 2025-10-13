@@ -75,13 +75,12 @@ mod helper_tests {
         let result = extract_witness_lock(&witness);
         assert!(result.is_ok(), "extract_witness_lock failed: {:?}", result);
 
-        let lock_range = result.unwrap();
-        assert!(lock_range.is_some(), "Expected Some lock range");
+        let lock_bytes = result.unwrap();
+        assert!(lock_bytes.is_some(), "Expected Some lock bytes");
 
-        let (start, end) = lock_range.unwrap();
-        assert_eq!(end - start, 65, "Lock field should be exactly 65 bytes");
-
-        assert_eq!(&witness[start..end], &signature[..], "Extracted signature mismatch");
+        let extracted = lock_bytes.unwrap();
+        assert_eq!(extracted.len(), 65, "Lock field should be exactly 65 bytes");
+        assert_eq!(&extracted[..], &signature[..], "Extracted signature mismatch");
     }
 
     #[test]
@@ -153,8 +152,8 @@ mod helper_tests {
             // Also verify with extract_witness_lock
             let result = extract_witness_lock(&witness).unwrap();
             if expected_len > 0 {
-                let (start, end) = result.unwrap();
-                assert_eq!(&witness[start..end], &test_data[..]);
+                let extracted = result.unwrap();
+                assert_eq!(&extracted[..], &test_data[..]);
             }
         }
     }
@@ -279,9 +278,8 @@ mod helper_tests {
 
         let result = extract_witness_lock(&expected);
         assert!(result.is_ok(), "Should extract from real WitnessArgs");
-        let lock_range = result.unwrap().unwrap();
-        let (start, end) = lock_range;
-        assert_eq!(&expected[start..end], &signature[..],
+        let extracted = result.unwrap().unwrap();
+        assert_eq!(&extracted[..], &signature[..],
                    "Should extract correct signature from real WitnessArgs");
     }
 
@@ -321,9 +319,9 @@ mod helper_tests {
             assert!(result.is_ok(), "Failed to parse witness with {} byte lock", size);
 
             if size > 0 {
-                let (start, end) = result.unwrap().unwrap();
-                assert_eq!(end - start, size, "Wrong size extracted for {} byte lock", size);
-                assert_eq!(&witness[start..end], &data[..], "Wrong data extracted");
+                let extracted = result.unwrap().unwrap();
+                assert_eq!(extracted.len(), size, "Wrong size extracted for {} byte lock", size);
+                assert_eq!(&extracted[..], &data[..], "Wrong data extracted");
             }
         }
 
@@ -346,9 +344,11 @@ mod helper_tests {
                 assert_eq!(real_opt.is_some(), helper_opt.is_some(),
                            "Lock presence should match for size {}", size);
 
-                if let (Some((r_start, r_end)), Some((h_start, h_end))) = (real_opt, helper_opt) {
-                    assert_eq!(r_end - r_start, h_end - h_start,
+                if let (Some(real_bytes), Some(helper_bytes)) = (real_opt, helper_opt) {
+                    assert_eq!(real_bytes.len(), helper_bytes.len(),
                                "Extracted sizes should match for size {}", size);
+                    assert_eq!(real_bytes, helper_bytes,
+                               "Extracted bytes should match for size {}", size);
                 }
             }
         }
