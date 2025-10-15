@@ -178,14 +178,6 @@ transaction:
       out_point:
         index: 0
         tx_hash: dynamic_ownership_lock_script_creation_tx
-    - dep_type: code
-      out_point:
-        index: 0
-        tx_hash: cell_b_creation_tx
-    - dep_type: dep_group
-      out_point:
-        index: 0
-        tx_hash: std_secp256k1_lock_script_creation_tx
   hash: 0xdd21dd83387568449e6c3b6c8fb0f678f08fe4efe699437daed5cbd373bc7747
   header_deps: []
   inputs:
